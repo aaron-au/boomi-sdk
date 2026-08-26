@@ -5,7 +5,53 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - Unreleased
+## [0.2.0] - 2026-08-26
+
+### Added
+
+- Generic transport primitives beyond query pagination: bulk GET
+  (`BulkGet`, chunked at the platform's 100-id ceiling, misses reported
+  rather than dropped), the async token-poll API (`AsyncGet`,
+  `AsyncQuery`, `DecodeAsync`, with `AsyncPollEvent` progress), and
+  `Client.Download` for platform-generated files, restricted to URLs on
+  the same site as the configured API host.
+- Tier-2 deployment objects: PackagedComponent create and get,
+  DeployedPackage deploy, undeploy, and query, Environment and
+  EnvironmentAtomAttachment, EnvironmentExtensions get and update
+  (partial by default), Folder create.
+- Tier-3 objects: ExecutionRequest with record polling and ProcessLog
+  download, ExecutionRecord queries, Branch create and delete,
+  MergeRequest stage, execute, revert, and delete, ComponentReference,
+  ComponentDiffRequest, SharedServerInformation.
+- Runtime operations: Atom and AtomConnectorVersions, ProcessSchedules
+  and ProcessScheduleStatus reads and writes, PersistedProcessProperties
+  (read-modify-write with `Upsert`; the full-replace update is guarded),
+  RuntimeProperties with single-property partial writes,
+  AccountCloudAttachmentProperties, ListQueues, ListenerStatus,
+  SharedWebServer with both platform spellings accepted and a
+  token-redaction helper, EnvironmentMapExtensionsSummary and
+  EnvironmentMapExtension, DeployedExpiredCertificate.
+- Account administration: Account with licence position, AccountUserRole,
+  Role, and the ConnectionLicensingReport CSV pipeline, including
+  recovery from a stuck undownloaded report.
+- Raw object access alongside the typed services: `objects.Raw` streams
+  GET, POST, single-page query, and DELETE against any object path in
+  XML or JSON (`Format`), byte-for-byte in both directions — the door
+  for tooling that reads and writes platform documents rather than
+  structs. The zero `Format` is XML.
+- `componentxml`: the contained struct view of component XML. The
+  envelope (`<bns:Component>` attributes, description, encryptedValues)
+  is typed for reading and for authoring create/update documents; the
+  inner `<bns:object>` — the component definition itself — is captured
+  and re-emitted verbatim, never re-encoded. Raw streams remain the
+  default for byte-exact work; the `encoding/xml` ban stays enforced
+  everywhere else in the SDK.
+- Confirmed-write guards: every call that changes a live environment or
+  runtime (deploy, undeploy, schedule writes, extension writes, web
+  server writes, branch and merge writes, persisted-property replace)
+  refuses to act until the caller sets `Confirmed`.
+
+## [0.1.0] - 2026-08-26
 
 ### Added
 

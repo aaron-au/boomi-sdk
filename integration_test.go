@@ -107,6 +107,8 @@ func (l *eventLog) OnPage(e progress.PageEvent) {
 	l.pages = append(l.pages, e)
 }
 
+func (l *eventLog) OnAsyncPoll(progress.AsyncPollEvent) {}
+
 func (l *eventLog) requestEvents() []progress.RequestEvent {
 	l.mu.Lock()
 	defer l.mu.Unlock()

@@ -46,6 +46,18 @@ func (c *Client) Observer() progress.Observer {
 	return c.observer
 }
 
+// AccountID returns the account this client's requests act on: the
+// override account in partner mode, otherwise the configured account.
+// Layers above transport use it for the objects that carry the account id
+// in a path or filter (Account, AccountUserRole).
+func (c *Client) AccountID() string {
+	if c.cfg.OverrideAccount != "" {
+		return c.cfg.OverrideAccount
+	}
+
+	return c.cfg.AccountID
+}
+
 // paceKey returns the process-wide registry key for this client's account.
 // Host is lowercased per the pace.Key contract.
 func (c *Client) paceKey() pace.Key {

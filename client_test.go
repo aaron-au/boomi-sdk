@@ -57,6 +57,8 @@ func (o *recordObserver) OnPage(e progress.PageEvent) {
 	o.pages = append(o.pages, e)
 }
 
+func (o *recordObserver) OnAsyncPoll(progress.AsyncPollEvent) {}
+
 func (o *recordObserver) throttledEvents() []progress.ThrottledEvent {
 	o.mu.Lock()
 	defer o.mu.Unlock()

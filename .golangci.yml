@@ -83,12 +83,15 @@ linters:
       rules:
         # Boomi component XML is opaque bytes by design: the SDK moves it,
         # never interprets it. Typed unmarshalling breaks the day Boomi adds
-        # a field, and a lossy round-trip corrupts customer components. The
-        # one exception is internal/query, which may build XML QueryConfig
-        # payloads for the platform's query API.
+        # a field, and a lossy round-trip corrupts customer components. Two
+        # exceptions: internal/query may build XML QueryConfig payloads for
+        # the platform's query API, and componentxml is the deliberate,
+        # contained struct view of the component ENVELOPE (the inner object
+        # stays verbatim bytes even there — see that package's doc).
         component-xml-is-opaque:
           files:
             - "!**/internal/query/**"
+            - "!**/componentxml/**"
           deny:
             - pkg: encoding/xml
               desc: >-

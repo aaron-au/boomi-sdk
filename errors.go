@@ -161,6 +161,10 @@ var (
 	// the platform reported on the first page. The SDK returns this
 	// rather than passing off partial results as complete.
 	ErrTruncated = errors.New("boomi: pagination truncated — collected fewer results than the platform reported")
+	// ErrNotReady means a platform-generated file is still being
+	// produced: the download URL answered 202 or 204. It is a state, not
+	// a failure — the caller waits and asks again.
+	ErrNotReady = errors.New("boomi: the download is still being generated")
 )
 
 // Quirk predicates. These detect known platform behaviours that hide
