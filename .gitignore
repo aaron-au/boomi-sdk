@@ -1,0 +1,11 @@
+# Pinned tools are built here on demand; never committed.
+/bin/
+/dist/
+# Task's up-to-date checksum cache.
+/.task/
+# Gate artefacts.
+/coverage.out
+*.test
+
+# OS noise.
+.DS_Store

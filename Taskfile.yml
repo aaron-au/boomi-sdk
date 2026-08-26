@@ -1,0 +1,144 @@
+# Task runner for boomi-sdk.
+#
+# Governing rule: every gate runs locally with one command and behaves
+# identically in CI. If a developer cannot reproduce a CI failure with
+# `task check`, the gate is broken.
+#
+# Every Go-module tool is version-pinned in tools/go.mod and built into ./bin,
+# so no globally-installed binary of unknown version can change a result.
+version: "3"
+
+vars:
+  BIN: '{{.ROOT_DIR}}/bin'
+  COVERPROFILE: '{{.ROOT_DIR}}/coverage.out'
+
+env:
+  # Pinned to an exact toolchain rather than `local`, so the version is stated
+  # in one place and a stray directive still cannot pull a different compiler.
+  # It must match the toolchain directive in go.mod: patch releases carry
+  # standard-library security fixes that govulncheck gates on, and `local`
+  # would silently keep building with whatever the developer happens to have.
+  GOTOOLCHAIN: go1.26.6
+  GOFLAGS: -mod=readonly
+  CGO_ENABLED: "0"
+
+tasks:
+  default:
+    cmds: [task: check]
+
+  # ---------------------------------------------------------------- tooling
+
+  tools:
+    desc: Build every pinned Go tool into ./bin
+    cmds:
+      - cmd: '{{if eq OS "windows"}}powershell -Command "New-Item -ItemType Directory -Force -Path bin"{{else}}mkdir -p bin{{end}}'
+        silent: true
+      - for:
+          [
+            mvdan.cc/gofumpt,
+            github.com/daixiang0/gci,
+            github.com/segmentio/golines,
+            github.com/golangci/golangci-lint/v2/cmd/golangci-lint,
+            golang.org/x/vuln/cmd/govulncheck,
+            github.com/securego/gosec/v2/cmd/gosec,
+            github.com/google/osv-scanner/v2/cmd/osv-scanner,
+            github.com/zricethezav/gitleaks/v8,
+          ]
+        cmd: go -C tools build -o '{{.BIN}}/' {{.ITEM}}
+    sources:
+      - tools/go.mod
+      - tools/go.sum
+    generates:
+      - bin/golangci-lint
+
+  # ------------------------------------------------------------ format/lint
+
+  fmt:
+    desc: Format with gofumpt, gci and golines
+    deps: [tools]
+    cmds:
+      - '{{.BIN}}/golangci-lint fmt'
+
+  fmt:check:
+    desc: Fail if anything is unformatted
+    deps: [tools]
+    cmds:
+      - '{{.BIN}}/golangci-lint fmt --diff'
+
+  lint:
+    desc: Run golangci-lint
+    deps: [tools]
+    cmds:
+      # The tools module holds only `tool` directives — no Go files to lint.
+      - '{{.BIN}}/golangci-lint run ./...'
+
+  vet:
+    desc: go vet (also inside golangci-lint; kept separate for fast feedback)
+    cmds:
+      - go vet ./...
+
+  # ------------------------------------------------------------------ tests
+
+  test:
+    desc: Unit tests with the race detector and shuffled order
+    cmds:
+      - go test -race -shuffle=on ./...
+
+  test:cover:
+    desc: Tests with a coverage profile
+    cmds:
+      - go test -cover -coverprofile='{{.COVERPROFILE}}' ./...
+
+  # --------------------------------------------------------------- security
+
+  sec:
+    desc: gosec, govulncheck, gitleaks and osv-scanner
+    deps: [tools]
+    cmds:
+      - '{{.BIN}}/gosec -quiet ./...'
+      - '{{.BIN}}/govulncheck ./...'
+      - '{{.BIN}}/osv-scanner scan source --lockfile go.mod'
+      - task: gitleaks
+
+  gitleaks:
+    desc: Secret scan over the full history
+    deps: [tools]
+    cmds:
+      - '{{.BIN}}/gitleaks git --no-banner --redact .'
+
+  # ----------------------------------------------------------------- build
+
+  build:matrix:
+    desc: Prove every package builds statically for every supported target
+    cmds:
+      # The SDK must stay pure Go on every platform a consumer might build
+      # for: a cgo or platform-specific dependency anywhere would surface in
+      # the consumer's build, not ours. This compiles everything with CGO off
+      # for each target, so the problem surfaces now rather than downstream.
+      - for:
+          [
+            darwin/amd64,
+            darwin/arm64,
+            linux/amd64,
+            linux/arm64,
+            windows/amd64,
+          ]
+        cmd: GOOS={{ (splitList "/" .ITEM) | first }} GOARCH={{ (splitList "/" .ITEM) | last }} go build ./...
+
+  # ------------------------------------------------------------------ gate
+
+  check:
+    desc: Everything CI runs, in the order that fails fastest
+    cmds:
+      - task: fmt:check
+      - task: vet
+      - task: lint
+      - task: test
+      - task: sec
+      - task: build:matrix
+
+  clean:
+    desc: Remove build and report artefacts
+    cmds:
+      - cmd: rm -rf bin dist coverage.out
+        platforms: [darwin, linux]

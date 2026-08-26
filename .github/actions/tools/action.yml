@@ -1,0 +1,24 @@
+name: Build pinned tools
+description: >-
+  Builds every tool pinned in tools/go.mod into ./bin, restoring them from
+  cache when tools/go.sum has not changed. Every gate runs the same binary
+  locally and in CI.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      id: cache
+      with:
+        path: bin
+        key: boomi-sdk-tools-${{ runner.os }}-${{ hashFiles('tools/go.sum') }}
+
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p bin
+        go -C tools build -o ../bin/ github.com/go-task/task/v3/cmd/task
+        ./bin/task tools
+
+    - shell: bash
+      run: echo "${GITHUB_WORKSPACE}/bin" >> "${GITHUB_PATH}"

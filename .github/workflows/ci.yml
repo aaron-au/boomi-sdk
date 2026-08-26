@@ -1,0 +1,107 @@
+# Pull-request pipeline.
+#
+# Fast lane first, so the common failures return in under two minutes. Every
+# action is pinned by commit SHA, never by tag.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege by default; jobs elevate only what they need.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: go1.26.6
+  GOFLAGS: -mod=readonly
+  CGO_ENABLED: "0"
+
+jobs:
+  # ---------------------------------------------------------- 1. fast lane
+  fast:
+    name: fmt, vet, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: tools/go.sum
+      - run: go mod verify
+      - run: go build ./...
+      - run: go vet ./...
+      - uses: ./.github/actions/tools
+      - run: ./bin/task fmt:check
+
+  # -------------------------------------------------------------- 2. lint
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: tools/go.sum
+      - uses: ./.github/actions/tools
+      - run: ./bin/task lint
+
+  # -------------------------------------------------------------- 3. test
+  test:
+    name: test (${{ matrix.os }}, go${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # The pinned toolchain, plus whatever is currently stable — the
+        # useful direction of coverage is the next Go release, since the
+        # code requires 1.26 APIs and cannot build on 1.25.
+        go: ["1.26.6", "stable"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: tools/go.sum
+      # The race detector needs cgo; it is the only place CGO is enabled.
+      - run: go test -race -shuffle=on ./...
+        env:
+          CGO_ENABLED: "1"
+
+  # ---------------------------------------------------------- 4. security
+  security:
+    name: gosec, govulncheck, gitleaks, osv-scanner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # gitleaks scans the full history, not just the diff.
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: tools/go.sum
+      - uses: ./.github/actions/tools
+      - run: ./bin/task sec
+
+  # ------------------------------------------------------------- 5. build
+  build:
+    name: cross-platform build matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: tools/go.sum
+      - uses: ./.github/actions/tools
+      # Proves every package builds pure Go for every platform a consumer
+      # might build for.
+      - run: ./bin/task build:matrix
