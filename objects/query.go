@@ -22,6 +22,9 @@ const emptyFilter = `{"QueryFilter":{}}`
 // contentTypeJSON is the media type for query envelopes.
 const contentTypeJSON = "application/json"
 
+// querySegment is the query endpoint's trailing path segment.
+const querySegment = "query"
+
 // mustFilter renders expr as a QueryFilter request body. It panics on a
 // builder error, which cannot happen for the statically-shaped expressions
 // this package constructs (non-empty properties, non-empty groups).
@@ -141,7 +144,7 @@ func queryFirst[T any](ctx context.Context, c *boomi.Client, entity string, filt
 
 	return doPage[T](ctx, c, boomi.Request{
 		Method:      http.MethodPost,
-		Path:        []string{entity, "query"},
+		Path:        []string{entity, querySegment},
 		Body:        bytes.NewReader(body),
 		ContentType: contentTypeJSON,
 		Accept:      contentTypeJSON,

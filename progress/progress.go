@@ -31,6 +31,9 @@ type Observer interface {
 	OnThrottled(ThrottledEvent)
 	// OnPage fires after each page of a paginated query is collected.
 	OnPage(PageEvent)
+	// OnAsyncPoll fires after each poll of an async operation that is
+	// still in progress.
+	OnAsyncPoll(AsyncPollEvent)
 }
 
 // RequestEvent describes one wire send. Attempt is 1-based; a retry of the
@@ -83,6 +86,19 @@ type PageEvent struct {
 	More   bool
 }
 
+// AsyncPollEvent reports one poll of an async operation that has not yet
+// settled. Entity is the object being fetched, Message is the platform's
+// own in-progress text ("Connecting to runtime...", ...), Elapsed is time
+// since the operation started, and Wait is the pause before the next
+// poll. Runtime-backed operations can sit in progress for minutes; this
+// event is what keeps that from reading as a hang.
+type AsyncPollEvent struct {
+	Entity  string
+	Message string
+	Elapsed time.Duration
+	Wait    time.Duration
+}
+
 // Nop is an Observer that discards every event. It is the default when a
 // Config supplies none.
 //
@@ -95,3 +111,4 @@ func (nopObserver) OnRequest(RequestEvent)     {}
 func (nopObserver) OnPaced(PacedEvent)         {}
 func (nopObserver) OnThrottled(ThrottledEvent) {}
 func (nopObserver) OnPage(PageEvent)           {}
+func (nopObserver) OnAsyncPoll(AsyncPollEvent) {}

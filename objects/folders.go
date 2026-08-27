@@ -2,6 +2,7 @@ package objects
 
 import (
 	"context"
+	"errors"
 
 	boomi "github.com/aaron-au/boomi-sdk"
 	"github.com/aaron-au/boomi-sdk/internal/query"
@@ -38,4 +39,23 @@ func (f Folders) All(ctx context.Context) ([]Folder, error) {
 // Roots returns the folders with no parent: IS_NULL parentId.
 func (f Folders) Roots(ctx context.Context) ([]Folder, error) {
 	return QueryAll[Folder](ctx, f.c, "Folder", mustFilter(query.IsNull("parentId")))
+}
+
+// folderWire is the POST Folder body.
+type folderWire struct {
+	Type     string `json:"@type"`
+	Name     string `json:"name"`
+	ParentID string `json:"parentId,omitempty"`
+}
+
+// Create creates a folder: POST Folder. An empty parentID creates a root
+// folder.
+func (f Folders) Create(ctx context.Context, name, parentID string) (Folder, error) {
+	if name == "" {
+		return Folder{}, errors.New("objects: folder name is empty")
+	}
+
+	body := folderWire{Type: "Folder", Name: name, ParentID: parentID}
+
+	return postJSON[Folder](ctx, f.c, body, "Folder")
 }
