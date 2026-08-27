@@ -147,3 +147,33 @@ func TestPackagedComponentCreate(t *testing.T) {
 		t.Fatalf("body = %q, empty packageVersion must be omitted", body)
 	}
 }
+
+// The platform serves componentVersion as a bare number in the create
+// response and a quoted number elsewhere; FlexInt must take both. Caught
+// live: create against a real account answered {"componentVersion":2}
+// where the struct, ported from query responses, expected a string.
+func TestFlexIntAcceptsBothWireForms(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want objects.FlexInt
+	}{
+		{`3`, 3},
+		{`"3"`, 3},
+		{`null`, 0},
+		{`""`, 0},
+	} {
+		var got objects.FlexInt
+		if err := json.Unmarshal([]byte(tc.in), &got); err != nil {
+			t.Fatalf("Unmarshal(%s): %v", tc.in, err)
+		}
+
+		if got != tc.want {
+			t.Fatalf("Unmarshal(%s) = %d, want %d", tc.in, got, tc.want)
+		}
+	}
+
+	var bad objects.FlexInt
+	if err := json.Unmarshal([]byte(`"x1"`), &bad); err == nil {
+		t.Fatal(`Unmarshal("x1") accepted a non-integer`)
+	}
+}

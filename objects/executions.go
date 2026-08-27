@@ -252,10 +252,15 @@ type processLogAnswer struct {
 // platform has assembled it, returning the raw zip stream. The caller
 // owns the stream and must close it.
 //
-// While the log is still being assembled the platform answers the
-// ProcessLog request itself with a 400 "is invalid" (boomi.IsLogNotReady)
-// and the download URL with 202 — both are waited out within opts'
-// budget.
+// Two waits happen in sequence, both within opts' budget. First, the
+// ProcessLog request itself answers 400 "is invalid"
+// (boomi.IsLogNotReady) until the execution is visible to the log
+// service; the request is retried until accepted. Then the ONE download
+// URL the accepted request returned is polled through its 202s until the
+// archive is ready. The URL must not be re-requested between polls: each
+// POST ProcessLog mints a fresh download location whose generation
+// starts over, so a mint-then-fetch loop reads a milliseconds-old URL
+// every iteration and 202s forever. Caught live in Phase 3.
 func (e Executions) Log(ctx context.Context, executionID string, opts *AsyncOptions) (io.ReadCloser, error) {
 	if executionID == "" {
 		return nil, errEmptyID("execution")
@@ -266,42 +271,50 @@ func (e Executions) Log(ctx context.Context, executionID string, opts *AsyncOpti
 	start := time.Now()
 	body := processLogWire{Type: "ProcessLog", ExecutionID: executionID, LogLevel: "ALL"}
 
+	wait := func(phase string, cause error) error {
+		elapsed := time.Since(start)
+		if elapsed > o.MaxWait {
+			return fmt.Errorf("objects: log for execution %s still not ready after %s: %w",
+				executionID, elapsed.Round(time.Second), cause)
+		}
+
+		obs.OnAsyncPoll(progress.AsyncPollEvent{
+			Entity: "ProcessLog", Message: phase, Elapsed: elapsed, Wait: o.InitialDelay,
+		})
+
+		return sleepCtx(ctx, o.InitialDelay)
+	}
+
+	var url string
+
+	for url == "" {
+		answer, err := postJSON[processLogAnswer](ctx, e.c, body, "ProcessLog")
+		switch {
+		case boomi.IsLogNotReady(err):
+			if werr := wait("waiting for the log request to be accepted", err); werr != nil {
+				return nil, werr
+			}
+		case err != nil:
+			return nil, err
+		case answer.URL == "":
+			return nil, errors.New("objects: the ProcessLog request gave no download location")
+		default:
+			url = answer.URL
+		}
+	}
+
 	for {
-		stream, err := e.tryLog(ctx, body)
+		stream, err := e.c.Download(ctx, url)
 		if err == nil {
 			return stream, nil
 		}
 
-		if !errors.Is(err, boomi.ErrNotReady) && !boomi.IsLogNotReady(err) {
+		if !errors.Is(err, boomi.ErrNotReady) {
 			return nil, err
 		}
 
-		elapsed := time.Since(start)
-		if elapsed > o.MaxWait {
-			return nil, fmt.Errorf("objects: log for execution %s still not ready after %s: %w",
-				executionID, elapsed.Round(time.Second), err)
-		}
-
-		obs.OnAsyncPoll(progress.AsyncPollEvent{
-			Entity: "ProcessLog", Message: "waiting for the log archive", Elapsed: elapsed, Wait: o.InitialDelay,
-		})
-
-		if sleepErr := sleepCtx(ctx, o.InitialDelay); sleepErr != nil {
-			return nil, sleepErr
+		if werr := wait("waiting for the log archive", err); werr != nil {
+			return nil, werr
 		}
 	}
-}
-
-// tryLog makes one request-then-download attempt.
-func (e Executions) tryLog(ctx context.Context, body processLogWire) (io.ReadCloser, error) {
-	answer, err := postJSON[processLogAnswer](ctx, e.c, body, "ProcessLog")
-	if err != nil {
-		return nil, err
-	}
-
-	if answer.URL == "" {
-		return nil, errors.New("objects: the ProcessLog request gave no download location")
-	}
-
-	return e.c.Download(ctx, answer.URL)
 }

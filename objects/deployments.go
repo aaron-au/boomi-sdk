@@ -1,44 +1,72 @@
 package objects
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"strconv"
 
 	boomi "github.com/aaron-au/boomi-sdk"
 	"github.com/aaron-au/boomi-sdk/internal/query"
 )
 
+// FlexInt is an integer the platform serves inconsistently: a bare JSON
+// number in some responses and a quoted one in others. PackagedComponent's
+// componentVersion arrives quoted from queries and bare from create.
+// It marshals back as a bare number.
+type FlexInt int
+
+// UnmarshalJSON accepts 3, "3", null, and "".
+func (n *FlexInt) UnmarshalJSON(b []byte) error {
+	s := string(bytes.Trim(b, `"`))
+	if s == "null" || s == "" {
+		*n = 0
+
+		return nil
+	}
+
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return fmt.Errorf("objects: %q is not an integer: %w", string(b), err)
+	}
+
+	*n = FlexInt(v)
+
+	return nil
+}
+
 // PackagedComponent is one packaged version of a component.
 type PackagedComponent struct {
-	PackageID        string `json:"packageId"`
-	PackageVersion   string `json:"packageVersion"`
-	ComponentID      string `json:"componentId"`
-	ComponentVersion string `json:"componentVersion"`
-	ComponentType    string `json:"componentType"`
-	CreatedDate      string `json:"createdDate"`
-	CreatedBy        string `json:"createdBy"`
-	Notes            string `json:"notes"`
-	Shareable        bool   `json:"shareable"`
-	Deleted          bool   `json:"deleted"`
-	BranchName       string `json:"branchName"`
+	PackageID        string  `json:"packageId"`
+	PackageVersion   string  `json:"packageVersion"`
+	ComponentID      string  `json:"componentId"`
+	ComponentVersion FlexInt `json:"componentVersion"`
+	ComponentType    string  `json:"componentType"`
+	CreatedDate      string  `json:"createdDate"`
+	CreatedBy        string  `json:"createdBy"`
+	Notes            string  `json:"notes"`
+	Shareable        bool    `json:"shareable"`
+	Deleted          bool    `json:"deleted"`
+	BranchName       string  `json:"branchName"`
 }
 
 // DeployedPackage is one packaged component deployed to an environment.
 // ComponentType distinguishes process, webservice, processroute and
 // customlibrary.
 type DeployedPackage struct {
-	DeploymentID     string `json:"deploymentId"`
-	Version          int    `json:"version"`
-	PackageID        string `json:"packageId"`
-	PackageVersion   string `json:"packageVersion"`
-	EnvironmentID    string `json:"environmentId"`
-	ComponentID      string `json:"componentId"`
-	ComponentVersion int    `json:"componentVersion"`
-	ComponentType    string `json:"componentType"`
-	DeployedDate     string `json:"deployedDate"`
-	DeployedBy       string `json:"deployedBy"`
-	Notes            string `json:"notes"`
-	Active           bool   `json:"active"`
+	DeploymentID     string  `json:"deploymentId"`
+	Version          int     `json:"version"`
+	PackageID        string  `json:"packageId"`
+	PackageVersion   string  `json:"packageVersion"`
+	EnvironmentID    string  `json:"environmentId"`
+	ComponentID      string  `json:"componentId"`
+	ComponentVersion FlexInt `json:"componentVersion"`
+	ComponentType    string  `json:"componentType"`
+	DeployedDate     string  `json:"deployedDate"`
+	DeployedBy       string  `json:"deployedBy"`
+	Notes            string  `json:"notes"`
+	Active           bool    `json:"active"`
 }
 
 // ErrDeployUnconfirmed guards writes that change what runs in a live

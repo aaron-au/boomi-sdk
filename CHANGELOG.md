@@ -5,7 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-08-26
+## [0.2.0] - 2026-08-27
+
+### Fixed
+
+Three wire-contract corrections from Phase 3 verification against a live
+account (all caught by exercising the full write cycle: create, package,
+deploy, execute, log download):
+
+- `Executions.Log` polled a fresh download URL each iteration: every
+  `POST ProcessLog` mints a new location whose generation starts over,
+  so the archive could never become ready. The request is now made once
+  (retried only through the 400 "is invalid" phase) and the single
+  issued URL is polled through its 202s.
+- `References.Of` queried `parentComponentId` alone, which the platform
+  rejects with HTTP 400; it now requires and sends `parentVersion`.
+- `PackagedComponent.ComponentVersion` was typed `string` from query
+  responses, but the create response carries a bare number. Now a
+  `FlexInt`, accepting both wire forms.
 
 ### Added
 

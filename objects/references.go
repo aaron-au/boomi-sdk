@@ -2,6 +2,7 @@ package objects
 
 import (
 	"context"
+	"strconv"
 
 	boomi "github.com/aaron-au/boomi-sdk"
 	"github.com/aaron-au/boomi-sdk/internal/query"
@@ -28,15 +29,21 @@ func NewReferences(c *boomi.Client) References {
 	return References{c: c}
 }
 
-// Of returns what a component depends on: every reference whose parent is
-// this component id.
-func (r References) Of(ctx context.Context, componentID string) ([]ComponentReference, error) {
+// Of returns what a component depends on at one saved version: every
+// reference whose parent is this component id. The version is required
+// because the platform rejects a parentComponentId filter that arrives
+// without parentVersion (HTTP 400, "parentComponentId should always be
+// accompanied by parentVersion").
+func (r References) Of(ctx context.Context, componentID string, version int) ([]ComponentReference, error) {
 	if componentID == "" {
 		return nil, errEmptyID("component")
 	}
 
 	return QueryAll[ComponentReference](
-		ctx, r.c, "ComponentReference", mustFilter(query.Eq("parentComponentId", componentID)),
+		ctx, r.c, "ComponentReference", mustFilter(query.And(
+			query.Eq("parentComponentId", componentID),
+			query.Eq("parentVersion", strconv.Itoa(version)),
+		)),
 	)
 }
 

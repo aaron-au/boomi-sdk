@@ -186,7 +186,15 @@ func TestLogWaitsOutNotReadyThenStreams(t *testing.T) {
 		t.Fatalf("log = %q, want the archive bytes", raw)
 	}
 
-	if logPosts.Load() < 2 || downloads.Load() < 2 {
-		t.Fatalf("posts = %d, downloads = %d, want both retried past not-ready", logPosts.Load(), downloads.Load())
+	// Exactly two POSTs: the rejected one and the accepted one. Every
+	// POST mints a fresh download URL whose generation starts over, so a
+	// client that re-POSTs between download polls reads a
+	// milliseconds-old URL each time and 202s forever. Caught live.
+	if logPosts.Load() != 2 {
+		t.Fatalf("posts = %d, want exactly 2 — the download URL must be polled, not re-minted", logPosts.Load())
+	}
+
+	if downloads.Load() != 2 {
+		t.Fatalf("downloads = %d, want 2 (one 202, one archive)", downloads.Load())
 	}
 }
